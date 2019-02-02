@@ -1,34 +1,23 @@
-install.packages(c("arules","arulesViz","TSP","prabclus","Matrix","trimcluster"))
+library(pacman)
 
+p_load(cowplot,arules,arulesViz, TSP, prabclus, Matrix, trimcluster,lattice,caret,rpart,rpart.plot,corrplot,RColorBrewer,randomForest,plotly,data.table,dplyr,doParallel,grid,crayon)
 #######################
-library(lattice)
-library(ggplot2)
-library(caret)
-library(rpart)
-library(rpart.plot)
-library(corrplot)
-library(RColorBrewer)
-library(randomForest)
-library(plotly)
-library(data.table)
-library(dplyr)
-#######################
-library(grid)
-library(TSP)
-library(Matrix)
-library(prabclus)
-library(trimcluster)
-library(arules)
-library(arulesViz)
-library(crayon)
-#######################
+
+# Prepare Parallel Process
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
 #import the data set as a data frame
-transactiondf <- read.csv("C:\\Users\\Javier Villasmil\\Desktop\\Ubiqum\\Task 07 - Association Between Products\\ElectronidexTransactions2017.csv",header = FALSE)
+transactiondf <- read.csv("C:\\Users\\Javier Villasmil\\Desktop\\Ubiqum\\Repositories\\Market Basket Analysis - Association Between Products\\1. Dataset\\ElectronidexTransactions2017.csv",header = FALSE)
 
 #import the data set as a trasaction list
-transactionslist <- read.transactions("C:\\Users\\Javier Villasmil\\Desktop\\Ubiqum\\Task 07 - Association Between Products\\ElectronidexTransactions2017.csv",
+transactionslist <- read.transactions("C:\\Users\\Javier Villasmil\\Desktop\\Ubiqum\\Repositories\\Market Basket Analysis - Association Between Products\\1. Dataset\\ElectronidexTransactions2017.csv",
                                       format = "basket", 
                                       sep = ",")
+
+head(transactiondf)
+View(transactiondf)
+
 #create categories for each group of items
 laptop <- c("LG Touchscreen Laptop",
             "Acer Aspire",
@@ -177,12 +166,14 @@ smarthomedevice <- c("Apple TV",
                      "Fire TV Stick",
                      "Roku Express")
 
-head(transactiondf)
+#subset the trasactions by BUSSINES OR RETAIL.
+
+#initialize vector with the indexes of transactions by category
 item = 0
 business <- c()
 retail <- c()
 
-#subset the trasactions by BUSSINES OR RETAIL.
+
 #making rules to split the trasactions in business and retail.
 for (m in 1:nrow(transactiondf)){
   trasactionsvector <- unname(unlist(transactiondf[m,]))
@@ -211,9 +202,22 @@ for (m in 1:nrow(transactiondf)){
                                 
 }
 
-business
+
 retail <- c(1:nrow(transactiondf))
 retail <- retail[!retail %in% business ]
+
+business #indexes of business trasactions
+retail   #indexes of retail trasactions
+
+#create two trasaction list data sets, one for business and one for retail
+transactionsbusiness <- transactionslist[-c(retail),] #removes the retails trasactions
+
+transactionsretail <- transactionslist[-c(business),] #removes the business trasactions
+
+#check transactions
+transactionsbusiness
+transactionsretail
+
 
 #You can view the transactions.
 inspect(transactionslist)   
@@ -229,18 +233,17 @@ inspect(transactionslist,ruleSep = "---->", itemSep = " // ", setStart = "***", 
         linebreak = TRUE)       
 
 # Number of transactions.
-length (transactionslist) 
+length(transactionslist) 
 
 # Number of items per transaction
-par(mfrow=c(1,1))
 hist(size(transactionslist))
+#with ggplot
+hist(size(transactionslist) , breaks=40 , col=rgb(0.2,0.8,0.5,0.5) , border=F, main="Frequency of numbers of items",xlab = "Number of items", xlim=c(0,30),ylim=c(0,2500))
 
 #Draw the boxplot and the histogram 
-
 toptrasactions <-which(size(transactionslist) > 29)
+toptrasactions
 
-par(mar=c(0, 3.1, 1.1, 2.1))
-hist(size(transactionslist) , breaks=40 , col=rgb(0.2,0.8,0.5,0.5) , border=F, main="Frequency of numbers of items",xlab = "Number of items", xlim=c(0,30),ylim=c(0,2500))
 # Lists the transactions by conversion (LIST must be capitalized). You can access each trasaction with [[i][j]
 LIST(transactionslist)   
 
@@ -250,15 +253,6 @@ itemLabels(transactionslist)
 #count how many distinc items are in the trasaction set
 length(itemInfo(transactionslist)[[1]])
 
-#create two trasaction list data sets, one for business and one for retail
-#removes the retails trasactions
-transactionsbusiness <- transactionslist[-c(retail),] 
-#removes the business trasactions
-transactionsretail <- transactionslist[-c(business),] 
-#check both data sets
-transactionsbusiness
-transactionsretail
-
 
 #initialize levels, missing values names, missing values index, and missing item counter.
 firstlevel <- c()
@@ -266,13 +260,15 @@ naindex <- c()
 nanames <- c()
 cont <- 0
 
-#testing the way of accesing the data.frame
+#testing the way of accesing the "data.frame"transaction-list"
 itemInfo(transactionslist)[[1]][125]
 itemInfo(transactionslist)[[1]][3] %in% mouse
 
 c(transactionsbusiness,transactionsretail)
 
+#creates a fuction to add hierarchy and categories
 newfunction<-function(Data){
+  
 #add Hierarchy - A Level to the BUSINESS trasaction list.
 for (i in 1:length(itemInfo(Data)[[1]])){
   if (i == 1){
@@ -397,19 +393,19 @@ transactionsretaillvl <- aggregate(transactionsretail, by = "level1")
 
 
 #plot using relative frequency the top 20 items - with arules itemfrequency plot function
-par(mfrow=c(1,1))
-itemFrequencyPlot(transactionsbusiness, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.8,ylim=c(0,1),col=rgb(0.2,0.8,0.5,0.5),main = "Product Type Frequency - Business")
-itemFrequencyPlot(transactionsretail, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.65, ylim=c(0,0.2),col=rgb(0.2,0.8,0.5,0.5),main = "Product Type Frequency - Retail")
-itemFrequencyPlot(transactionsbusinesslvl, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.8,ylim=c(0,1),col=rgb(0.2,0.8,0.5,0.5),main = "Category Frequency - Business")
-itemFrequencyPlot(transactionsretaillvl, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.65,ylim=c(0,0.5),col=rgb(0.2,0.8,0.5,0.5),main = "Category Frequency - Retail")
 
-itemsfrequency <- sort(itemFrequency(transactionsretail), decreasing=TRUE)
+p1 <- itemFrequencyPlot(transactionsbusiness, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.8,ylim=c(0,1),col=rgb(0.2,0.8,0.5,0.5),main = "Product Type Frequency - Business")
+p2 <- itemFrequencyPlot(transactionsretail, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.65, ylim=c(0,0.2),col=rgb(0.2,0.8,0.5,0.5),main = "Product Type Frequency - Retail")
+p3 <- itemFrequencyPlot(transactionsbusinesslvl, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.8,ylim=c(0,1),col=rgb(0.2,0.8,0.5,0.5),main = "Category Frequency - Business")
+p4 <- itemFrequencyPlot(transactionsretaillvl, type = "relative", weighted = FALSE, topN = 20,cex.names = 0.65,ylim=c(0,0.5),col=rgb(0.2,0.8,0.5,0.5),main = "Category Frequency - Retail")
+
+
+
 #You can visualize all of the transactions within your dataset.
 image(transactionslist)
 image(sample(transactionsbusinesslvl,15))
 
-#These parameters are requesting that the rules cover 10% of the transactions and are 80% correct.
-
+#rules selection using the apriori fuction: Support, Confidence and Lift
 rulesbusiness <- apriori (transactionsbusiness, parameter = list(supp = 0.01, conf = 0.6, maxlen =10, minlen =2))
 rulesretail <- apriori (transactionsretail, parameter = list(supp = 0.001, conf = 0.3, maxlen =10, minlen =2))
 rulesbusinesslvl <- apriori (transactionsbusinesslvl, parameter = list(supp = 0.01, conf = 0.6, maxlen =10, minlen =2))
@@ -418,16 +414,19 @@ rulesretaillvl <- apriori (transactionsretaillvl, parameter = list(supp = 0.001,
 rulesset <- list(rulesbusiness, rulesretail, rulesbusinesslvl, rulesretaillvl)
 rulesset
 
+#check redundant rules
 for (i in 1:length(rulesset)){
   rulesset[[i]] <- rulesset[[i]][!is.redundant(rulesset[[i]])]
   
 }
-  
+
+#remove redundat rules  
 rulesbusiness<- rulesset[[1]]
 rulesretail<- rulesset[[2]]
 rulesbusinesslvl<- rulesset[[3]]
 rulesretaillvl<- rulesset[[4]]
 
+#final rules
 rulesset
 
 #The top three rules with respect to the Support, Lift, Confidence
@@ -465,31 +464,27 @@ inspect(head(sort(business_iMac, by = "lift"),50))
 inspect(head(sort(business_Hplaptop, by = "lift"),10))
 inspect(head(sort(business_lenovodesktop, by = "lift"),10))
 inspect(head(sort(business_gamerpc, by = "lift"),10))
-#########################################################################################################
 
 
 #top 10 rules by lift RETAIL SUBSET
 inspect(head(sort(rulesset[[2]], by = "lift"),10))
 inspect(head(sort(rulesset[[3]], by = "lift"),10))
 
+#Using Rule Explorer
+ruleExplorer(rulesset[[1]]) #Bussiness
+ruleExplorer(rulesset[[2]]) #Retail
+ruleExplorer(rulesset[[3]]) #Bussiness Level
+ruleExplorer(rulesset[[4]]) #Retail Level
 
 
+######## PLOTS BY CODE ######
+plot(rulesset[[1]], measure=c("support", "confidence"), shading="lift", interactive=TRUE)
+plot(rulesset[[2]], measure=c("support", "confidence"), shading="lift", interactive=TRUE)
+plot(rulesset[[3]], measure=c("support", "confidence"), shading="lift", interactive=TRUE)
+plot(rulesset[[4]], measure=c("support", "confidence"), shading="lift", interactive=TRUE)
 
-
-
-
-
-ruleswithfilter <- apriori(transactionsbusiness, parameter = list(supp=0.001, conf=0.1,maxlen =2, minlen =2),appearance = list(default="rhs",lhs=c("iMac"))   )                                                                                                                                                                                                                                
-ruleswithfilter
-
-
-
-sel <- plot(ruleswithfilter, measure=c("support", "confidence"), shading="lift", interactive=TRUE)
-
-inspect(head(sort(ruleswithfilter, by = "lift"),50))
 
 #xaxis: support, yaxis: confidence shading: lift
-par(mfrow=c(2,2))
 for (o in 1:length(rulesset)){
     plot(rulesset[[o]], method = "scatter", measure=c("support", "confidence"), shading="lift")
 }
@@ -498,147 +493,13 @@ for (o in 1:length(rulesset)){
   plot(rulesset[[o]], shading="order", control=list(main = "Two-key plot"))
 }
 
-sel <- plot(rulesset[[2]], measure=c("support", "confidence"), shading="lift", interactive=TRUE)
+#Graph plot for the first 20 rules
+for (o in 1:length(rulesset)){
+  plot(rulesset[[o]][1:20], method="graph", control=list(type="items"))
+}
 
-
+#general plot for the quality of each rule
 rulesbusiness@quality
 plot(quality(rulesbusiness))
 
-#Graph plot 
-par(mfrow=c(2,2))
-for (o in 1:length(rulesset)){
-  plot(rulesset[[o]][1:10], method="graph", control=list(type="items"))
-}
-
-
 ##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-##################################################################
-newfunction<-function(Data){
-  #add Hierarchy - A Level to the BUSINESS trasaction list.
-  for (i in 1:length(itemInfo(transactionsbusiness)[[1]])){
-    if (i == 1){
-      firstlevel <- c()
-      naindex <- c()
-      nanames <- c()
-      cont <- 0
-    }
-    if (itemInfo(transactionsbusiness)[[1]][i] %in% laptop){
-      firstlevel[i] <- "laptop"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% desktop){
-      firstlevel[i] <- "desktop"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% monitor){
-      firstlevel[i] <- "monitor"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% mouse){
-      firstlevel[i] <- "mouse"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% keyboard){
-      firstlevel[i] <- "keyboard"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% mousekeycombo){
-      firstlevel[i] <- "mouse and keyboard combo"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% compheadphone){
-      firstlevel[i] <- "computer headphones"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% actvheadphone){
-      firstlevel[i] <- "active headphones"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% cords){
-      firstlevel[i] <- "computer cords"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% accesories){
-      firstlevel[i] <- "accesories"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% speaker){
-      firstlevel[i] <- "speaker"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% printer){
-      firstlevel[i] <- "printer"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% printerink){
-      firstlevel[i] <- "printer ink"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% computerstand){
-      firstlevel[i] <- "computer stand"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% tablets){
-      firstlevel[i] <- "tablets"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% harddrive){
-      firstlevel[i] <- "external hardrive"
-    }
-    else if (itemInfo(transactionsbusiness)[[1]][i] %in% smarthomedevice){
-      firstlevel[i] <- "smart home devices"
-    }
-    #check for NA values, products that don't match a category
-    else{
-      naindex <- c(naindex,i)
-      productname <- itemInfo(transactionsbusiness)[[1]][i]
-      nanames <- c(nanames,productname)
-      cont = cont + 1 
-    }
-  }
-  #warning the tells the products without category
-  sprintf("There are %i products that dont corrrespond to a category, please review", cont)
-  
-  #check the names of the products without category
-  nanames
-  
-  #check the index of the products without category
-  naindex
-  
-  #select with the fuction which() the true value for the vector is.na - it means picking the NA values (another way of doing it)
-  which(is.na(firstlevel))
-  
-  #check the hierarchy
-  firstlevel
-  
-  #assing the hierarchy to the first level of your trasactions data set.
-  transactionsbusiness@itemInfo$level1 <- firstlevel
-  
-  #check for an empty transaction
-  emptytrasactions <-which(size(transactionsbusiness) == 0)
-  emptytrasactions
-  #inspect the empty trasactions in your dataset
-  if (length(emptytrasactions) != 0){
-    for (i in 1:length(emptytrasactions)){
-      contenido <- emptytrasactions[i]
-      inspect(transactionsbusiness[contenido])
-    }
-  } else {print("there are no empty transactions")}
-  
-  
-  #remove the empty trasactions and create a new dataset (two trasactions were removed)
-  #one way of removing values. pick the empty values and substract the rows
-  if (length(emptytrasactions) != 0){
-    transactionsbusiness <- transactionsbusiness[-c(emptytrasactions),] 
-    transactionsbusiness
-  }
-  
-  transactionsbusiness}
